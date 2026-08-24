@@ -51,7 +51,8 @@ Planned fixed-size dashboard: **1366 × 768**
 - [x] Cleaning and reconciliation approach
 - [x] SQL analysis documented
 - [x] Findings and recommendations documented
-- [ ] Add cleaned data and reproducible preparation code
+- [x] Add cleaned data with source and validation notes
+- [ ] Add reproducible preparation code
 - [ ] Add complete SQL script and analysis outputs
 - [ ] Build and publish Tableau dashboard
 - [ ] Add dashboard screenshots and Tableau Public link
