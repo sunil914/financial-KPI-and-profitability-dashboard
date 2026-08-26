@@ -8,6 +8,8 @@ DROP VIEW IF EXISTS v_loss_exceptions;
 CREATE VIEW v_project_kpis AS
 SELECT
     COUNT(*) AS records,
+    ROUND(SUM(units_sold), 2) AS units_sold,
+    ROUND(SUM(discounts), 2) AS discounts,
     ROUND(SUM(net_sales), 2) AS net_sales,
     ROUND(SUM(profit), 2) AS profit,
     ROUND(100.0 * SUM(profit) / SUM(net_sales), 2) AS profit_margin_pct,
