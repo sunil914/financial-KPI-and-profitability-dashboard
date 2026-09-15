@@ -32,8 +32,34 @@ This project analyses Microsoft’s Financial Sample to explain how product mix,
 
 - [`data/`](data/) — cleaned data with source and validation notes
 - [`sql/`](sql/) — executable SQLite schema, profitability views and run guide
+- [`scripts/prepare_data.py`](scripts/prepare_data.py) — Pandas preparation with row-level reconciliation, KPI checks and checksum validation
 - [`scripts/build_database.py`](scripts/build_database.py) — standard-library loader that rebuilds and validates `project.db`
 - [`tableau/`](tableau/) — build guide; workbook and screenshots are still pending
+
+## Reproduce the prepared data
+
+1. Download Microsoft's `Financial Sample.xlsx` workbook and place it in `data/`.
+2. Install the preparation dependencies:
+
+```bash
+python3 -m pip install pandas openpyxl
+```
+
+3. Rebuild the cleaned CSV from the repository root:
+
+```bash
+python3 scripts/prepare_data.py
+```
+
+To use a workbook elsewhere or choose another output path:
+
+```bash
+python3 scripts/prepare_data.py "path/to/Financial Sample.xlsx" --output "path/to/financial_sample_clean.csv"
+```
+
+Before replacing the output, the script checks both financial identities for every record, reconciles all seven documented project measures and verifies the exact SHA-256 in [`data/README.md`](data/README.md). A failed reconciliation or checksum leaves the existing output unchanged.
+
+Run `python3 scripts/build_database.py` afterward to rebuild `project.db`, apply the SQL analysis views and print the validated project KPIs.
 
 ## Tableau dashboard — in progress
 
@@ -60,7 +86,7 @@ Planned fixed-size dashboard: **1366 × 768**
 - [x] Findings and recommendations documented
 - [x] Add cleaned data with source and validation notes
 - [x] Add reproducible SQLite database loader
-- [ ] Add reproducible preparation code
+- [x] Add reproducible preparation code
 - [x] Add complete SQL schema and analysis views
 - [ ] Build and publish Tableau dashboard
 - [ ] Add dashboard screenshots and Tableau Public link
