@@ -34,6 +34,7 @@ This project analyses Microsoft’s Financial Sample to explain how product mix,
 - [`sql/`](sql/) — executable SQLite schema, profitability views and run guide
 - [`scripts/prepare_data.py`](scripts/prepare_data.py) — Pandas preparation with row-level reconciliation, KPI checks and checksum validation
 - [`scripts/build_database.py`](scripts/build_database.py) — standard-library loader that rebuilds and validates `project.db`
+- [`scripts/export_tableau_data.py`](scripts/export_tableau_data.py) — dependency-free validation and deterministic Tableau CSV export
 - [`tableau/`](tableau/) — build guide; workbook and screenshots are still pending
 
 ## Reproduce the prepared data
@@ -60,6 +61,25 @@ python3 scripts/prepare_data.py "path/to/Financial Sample.xlsx" --output "path/t
 Before replacing the output, the script checks both financial identities for every record, reconciles all seven documented project measures and verifies the exact SHA-256 in [`data/README.md`](data/README.md). A failed reconciliation or checksum leaves the existing output unchanged.
 
 Run `python3 scripts/build_database.py` afterward to rebuild `project.db`, apply the SQL analysis views and print the validated project KPIs.
+
+## Export the Tableau-ready views
+
+Validate `project.db` and export all required views in one step:
+
+```bash
+python3 scripts/export_tableau_data.py
+```
+
+The exporter checks SQLite integrity, all seven documented KPIs and the 58-row loss-exception view before atomically writing these ordered files:
+
+- `tableau/exports/project_kpis.csv`
+- `tableau/exports/monthly_performance.csv`
+- `tableau/exports/product_performance.csv`
+- `tableau/exports/country_performance.csv`
+- `tableau/exports/segment_discount_performance.csv`
+- `tableau/exports/loss_exceptions.csv`
+
+Use `--database` or `--output-dir` to select another validated database or export location. If any integrity, view or KPI check fails, the script exits before replacing the export set.
 
 ## Tableau dashboard — in progress
 
