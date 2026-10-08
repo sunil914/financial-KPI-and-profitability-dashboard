@@ -18,26 +18,20 @@ Create a fixed-size executive dashboard that answers five questions:
 **Primary audience:** finance and commercial decision-makers  
 **Source:** [Microsoft Financial Sample](https://learn.microsoft.com/en-us/power-bi/create-reports/sample-financial-download)
 
-## 2. Required fields
+## 2. Validated Tableau sources
 
-Confirm these fields are available before building worksheets:
+Run `python3 scripts/export_tableau_data.py` and connect each worksheet to the export that matches its analytical grain:
 
-| Business field | Expected purpose |
-|---|---|
-| Date | Monthly performance trend |
-| Year | Dashboard filter |
-| Segment | Customer-segment comparison |
-| Country | Geographic performance |
-| Product | Product performance |
-| Discount Band | Discount and margin comparison |
-| Units Sold | Volume KPI |
-| Gross Sales | Pre-discount sales |
-| Discounts | Discount KPI |
-| Sales / Net Sales | Post-discount sales |
-| COGS | Cost of goods sold |
-| Profit | Profit KPI |
+| Export | Grain | Intended use |
+|---|---|---|
+| `project_kpis.csv` | One project-total row | Five KPI cards and the loss-record count |
+| `monthly_performance.csv` | Year × month | Net-sales and profit trends |
+| `product_performance.csv` | Product | Product profitability |
+| `country_performance.csv` | Country | Country profitability |
+| `segment_discount_performance.csv` | Segment × discount band | Margin matrix |
+| `loss_exceptions.csv` | Individual loss-making record | Exception table |
 
-Rename the source field **Sales** to **Net Sales** in Tableau so the workbook matches the project documentation.
+Treat these as independent, worksheet-specific sources. **Do not join or union the exports:** their grains differ, so combining them would multiply or mix already-aggregated values. Keep `project.db` and the SQL views as reconciliation evidence rather than extra tables in the Tableau model.
 
 ## 3. Validation gate
 
@@ -56,15 +50,20 @@ These are rounded display values. Preserve full precision in Tableau and round o
 
 Also verify:
 
-- **Net Sales = Gross Sales − Discounts**
-- **Profit = Net Sales − COGS**
-- Date is recognised as a date, not text.
-- Currency and unit fields are numeric.
-- No dashboard filter changes the opening KPI values unexpectedly.
+- `project_kpis.csv` contains exactly one row and the loss count is 58.
+- `loss_exceptions.csv` contains exactly 58 rows.
+- Each worksheet uses only its documented export and does not duplicate rows through joins.
+- Currency, unit and percentage fields are numeric.
+- Year and month number sort the monthly export chronologically.
+- Clearing a worksheet filter or action restores that source's opening values.
+
+The row-level identities **Net Sales = Gross Sales − Discounts** and **Profit = Net Sales − COGS** are enforced upstream by the preparation workflow. The exported aggregate files do not contain every component needed to recalculate those identities row by row, so verify them through the validated database build rather than inventing Tableau fields.
 
 ## 4. Calculated fields
 
-### Profit Margin
+The exports already contain `profit_margin_pct`. Display it as a percentage value without applying an additional ×100 conversion. Never average group margins to create a total.
+
+If a view combines multiple rows from one aggregate source, calculate the weighted margin from its additive measures:
 
 ```tableau
 IF SUM([Net Sales]) = 0 THEN
@@ -74,42 +73,23 @@ ELSE
 END
 ```
 
-Format as a percentage with two decimal places.
+Format this result as a percentage with two decimal places.
 
-### Discount Rate
-
-```tableau
-IF SUM([Gross Sales]) = 0 THEN
-    NULL
-ELSE
-    SUM([Discounts]) / SUM([Gross Sales])
-END
-```
-
-Format as a percentage with two decimal places.
-
-### Loss-Making Record
+Create a real monthly date from the fields that actually exist in `monthly_performance.csv`:
 
 ```tableau
-IF [Profit] < 0 THEN 1 ELSE 0 END
+MAKEDATE(INT([Year]), INT([Month Number]), 1)
 ```
 
-Use `SUM([Loss-Making Record])` for the exception count. Keeping this calculation at row level ensures the count represents records rather than aggregated groups.
-
-### Year Month
-
-```tableau
-DATETRUNC('month', [Date])
-```
-
-Display as `MMM YYYY` and keep the underlying value continuous for chronological sorting.
+Display it as `MMM YYYY` and keep it continuous for chronological sorting. The loss-exception source is already restricted to the 58 validated loss-making records, so do not recreate or sum a row-level loss flag in that worksheet.
 
 ## 5. Worksheet specifications
 
-Use these worksheet names so the workbook remains easy to audit.
+Use these worksheet names and sources so the workbook remains easy to audit.
 
 ### KPI — Net Sales
 
+- Source: `project_kpis.csv`
 - Marks: Text
 - Measure: `SUM([Net Sales])`
 - Format: Currency, millions, two decimals
@@ -124,6 +104,7 @@ Repeat the same structure for:
 
 ### Trend — Monthly Net Sales
 
+- Source: `monthly_performance.csv`
 - Columns: `Year Month` continuous
 - Rows: `SUM([Net Sales])`
 - Marks: Line
@@ -142,6 +123,7 @@ Build this as a separate aligned panel under the net-sales trend. Separate panel
 
 ### Performance — Country
 
+- Source: `country_performance.csv`
 - Rows: `Country`
 - Columns: `SUM([Profit])`
 - Marks: Horizontal bar
@@ -151,6 +133,7 @@ Build this as a separate aligned panel under the net-sales trend. Separate panel
 
 ### Performance — Product
 
+- Source: `product_performance.csv`
 - Rows: `Product`
 - Columns: `SUM([Profit])`
 - Marks: Horizontal bar
@@ -160,6 +143,7 @@ Build this as a separate aligned panel under the net-sales trend. Separate panel
 
 ### Matrix — Segment × Discount Band
 
+- Source: `segment_discount_performance.csv`
 - Rows: `Segment`
 - Columns: `Discount Band`
 - Marks: Square
@@ -170,7 +154,10 @@ Build this as a separate aligned panel under the net-sales trend. Separate panel
 
 ### Exceptions — Loss-Making Records
 
-Filter to `Loss-Making Record = 1`.
+- Source: `loss_exceptions.csv`
+- Expected rows: **58**
+
+The export is already filtered to loss-making records; do not add a second loss flag or claim that this exception-only source represents the full portfolio.
 
 Include:
 
@@ -201,22 +188,17 @@ Keep padding and spacing consistent. Avoid decorative elements that do not suppo
 
 ## 7. Interactivity
 
-Configure filters to apply to all relevant worksheets using the same data source:
+The six exports are independent aggregate sources, so a dimension may filter only worksheets whose source contains that field:
 
-- Year
-- Country
-- Segment
-- Product
-- Discount Band
+- Year and month belong to the monthly trend source.
+- Country belongs to the country and loss-exception sources.
+- Product belongs to the product and loss-exception sources.
+- Segment and discount band belong to the matrix and loss-exception sources.
+- Project KPI cards are fixed opening totals and must not appear to respond to unsupported cross-source filters.
 
-Add dashboard actions:
+Use worksheet highlighting or navigation where a dimension is absent from another source. Do not configure a country selection to imply that it can recalculate the product export, or a segment selection to imply that it can recalculate the country export. A fully cross-filterable dashboard would require a separate validated row-level source and is outside the current six-export model.
 
-- Selecting a country filters product and exception views.
-- Selecting a segment filters the margin matrix and exception view.
-- Clearing a selection restores the complete dashboard.
-- Hover tooltips provide full values without overcrowding labels.
-
-After configuring actions, repeat the KPI reconciliation with all filters cleared.
+After configuring supported actions, clear every selection and repeat the opening reconciliation.
 
 ## 8. Formatting and accessibility
 
@@ -243,9 +225,11 @@ In particular:
 
 Before publishing to Tableau Public:
 
+- [ ] Each worksheet uses the documented export and no exports are joined or unioned
 - [ ] Opening KPIs reconcile to the documented totals
 - [ ] Net Sales and Profit identities reconcile
-- [ ] All filters and actions work as intended
+- [ ] Filters and actions affect only sources that contain the selected dimension
+- [ ] No control visually promises unsupported cross-source recalculation
 - [ ] Months are chronologically sorted
 - [ ] Negative profit is visible and clearly labelled
 - [ ] Tooltips use consistent units and currency
@@ -256,20 +240,13 @@ Before publishing to Tableau Public:
 - [ ] Tableau Public link is added to the README
 - [ ] Final dashboard screenshot is added under `images/`
 
-## 11. Next repository assets
+## 11. Remaining publication evidence
 
-The next implementation phase should add:
+The validated clean data, SQL analysis and six Tableau exports are already reproducible. The remaining evidence is:
 
-```text
-data/financial_clean.csv
-sql/analysis.sql
-analysis/kpis.json
-tableau/monthly_performance.csv
-tableau/country_performance.csv
-tableau/product_performance.csv
-tableau/segment_performance.csv
-tableau/discount_band_performance.csv
-images/dashboard.png
-```
+- the Tableau workbook;
+- a final dashboard screenshot under `images/`;
+- a working Tableau Public URL; and
+- a completed reconciliation, interaction and accessibility review.
 
 Do not mark the dashboard complete until the workbook is published, the link works and the displayed KPIs pass the reconciliation gate.
