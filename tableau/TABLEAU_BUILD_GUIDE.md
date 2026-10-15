@@ -128,7 +128,7 @@ Build this as a separate aligned panel under the net-sales trend. Separate panel
 - Columns: `SUM([Profit])`
 - Marks: Horizontal bar
 - Sort: Descending by profit
-- Tooltip: Country, Net Sales, Profit, Profit Margin and Discounts
+- Tooltip: Country, Net Sales, Profit and Profit Margin
 - Add a zero reference line so losses are visible.
 
 ### Performance — Product
@@ -149,7 +149,7 @@ Build this as a separate aligned panel under the net-sales trend. Separate panel
 - Marks: Square
 - Colour: `Profit Margin`
 - Label: `Profit Margin`
-- Tooltip: Segment, Discount Band, Net Sales, Profit, Margin and Discounts
+- Tooltip: Segment, Discount Band, Records, Net Sales, Profit and Profit Margin
 - Use a diverging palette centred at 0%.
 
 ### Exceptions — Loss-Making Records
@@ -161,14 +161,15 @@ The export is already filtered to loss-making records; do not add a second loss 
 
 Include:
 
+- Date
 - Country
 - Segment
 - Product
 - Discount Band
 - Net Sales
-- Discounts
 - Profit
-- Profit Margin
+
+The loss export does not contain Discounts, COGS or a precomputed Profit Margin. Do not add those fields unless the exporter and validation contract are deliberately extended.
 
 Sort by Profit ascending so the largest losses appear first. This sheet supports investigation; it must not imply that discounting alone caused a loss.
 
