@@ -36,6 +36,55 @@ EXPECTED_KPIS = {
     "profit_margin_pct": 14.23,
     "loss_making_records": 58,
 }
+EXPECTED_EXPORT_COLUMNS = {
+    "v_project_kpis": (
+        "records",
+        "units_sold",
+        "discounts",
+        "net_sales",
+        "profit",
+        "profit_margin_pct",
+        "loss_making_records",
+    ),
+    "v_monthly_performance": (
+        "year",
+        "month_number",
+        "month_name",
+        "net_sales",
+        "profit",
+        "profit_margin_pct",
+    ),
+    "v_product_performance": (
+        "product",
+        "units_sold",
+        "net_sales",
+        "profit",
+        "profit_margin_pct",
+    ),
+    "v_country_performance": (
+        "country",
+        "net_sales",
+        "profit",
+        "profit_margin_pct",
+    ),
+    "v_segment_discount_performance": (
+        "segment",
+        "discount_band",
+        "records",
+        "net_sales",
+        "profit",
+        "profit_margin_pct",
+    ),
+    "v_loss_exceptions": (
+        "date",
+        "country",
+        "segment",
+        "product",
+        "discount_band",
+        "net_sales",
+        "profit",
+    ),
+}
 
 
 def validate_database(connection: sqlite3.Connection) -> None:
@@ -53,6 +102,15 @@ def validate_database(connection: sqlite3.Connection) -> None:
     missing = [view for view, _ in EXPORTS if view not in available]
     if missing:
         raise ValueError(f"Missing required views: {', '.join(missing)}")
+
+    for view, expected_columns in EXPECTED_EXPORT_COLUMNS.items():
+        cursor = connection.execute(f'SELECT * FROM "{view}" LIMIT 0')
+        actual_columns = tuple(column[0] for column in cursor.description)
+        if actual_columns != expected_columns:
+            raise ValueError(
+                f"{view} column contract mismatch: expected "
+                f"{expected_columns}, got {actual_columns}"
+            )
 
     row = connection.execute("SELECT * FROM v_project_kpis").fetchone()
     if row is None:
@@ -140,7 +198,7 @@ def main() -> None:
         if args.check_only:
             print(
                 "Validation passed: SQLite integrity, six required views, "
-                "seven KPIs and 58 loss records."
+                "six export column contracts, seven KPIs and 58 loss records."
             )
             return
 
