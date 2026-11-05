@@ -86,6 +86,58 @@ EXPECTED_EXPORT_COLUMNS = {
     ),
 }
 
+EXPECTED_UNIQUE_GRAINS = {
+    "v_monthly_performance": ("year", "month_number"),
+    "v_product_performance": ("product",),
+    "v_country_performance": ("country",),
+    "v_segment_discount_performance": ("segment", "discount_band"),
+}
+
+
+def validate_export_grains(connection: sqlite3.Connection) -> None:
+    """Reject empty, null or duplicate rows at each Tableau export grain."""
+    project_rows = connection.execute(
+        "SELECT COUNT(*) FROM v_project_kpis"
+    ).fetchone()[0]
+    if project_rows != 1:
+        raise ValueError(
+            f"v_project_kpis must contain exactly one row; got {project_rows}."
+        )
+
+    for view, grain_columns in EXPECTED_UNIQUE_GRAINS.items():
+        quoted_columns = ", ".join(f'"{column}"' for column in grain_columns)
+        blank_checks = " OR ".join(
+            f'"{column}" IS NULL OR TRIM(CAST("{column}" AS TEXT)) = \'\''
+            for column in grain_columns
+        )
+        row_count = connection.execute(
+            f'SELECT COUNT(*) FROM "{view}"'
+        ).fetchone()[0]
+        blank_rows = connection.execute(
+            f'SELECT COUNT(*) FROM "{view}" WHERE {blank_checks}'
+        ).fetchone()[0]
+        duplicate_grains = connection.execute(
+            f'SELECT COUNT(*) FROM ('
+            f'SELECT {quoted_columns} FROM "{view}" '
+            f'GROUP BY {quoted_columns} HAVING COUNT(*) > 1)'
+        ).fetchone()[0]
+        if row_count == 0 or blank_rows or duplicate_grains:
+            raise ValueError(
+                f"{view} grain check failed: rows={row_count}, "
+                f"blank grain rows={blank_rows}, "
+                f"duplicate grains={duplicate_grains}."
+            )
+
+    invalid_losses = connection.execute(
+        "SELECT COUNT(*) FROM v_loss_exceptions "
+        "WHERE profit IS NULL OR profit >= 0"
+    ).fetchone()[0]
+    if invalid_losses:
+        raise ValueError(
+            "v_loss_exceptions contains "
+            f"{invalid_losses} rows without strictly negative profit."
+        )
+
 
 def validate_database(connection: sqlite3.Connection) -> None:
     """Fail before export if integrity, views or documented KPIs drift."""
@@ -111,6 +163,8 @@ def validate_database(connection: sqlite3.Connection) -> None:
                 f"{view} column contract mismatch: expected "
                 f"{expected_columns}, got {actual_columns}"
             )
+
+    validate_export_grains(connection)
 
     row = connection.execute("SELECT * FROM v_project_kpis").fetchone()
     if row is None:
@@ -198,7 +252,7 @@ def main() -> None:
         if args.check_only:
             print(
                 "Validation passed: SQLite integrity, six required views, "
-                "six export column contracts, seven KPIs and 58 loss records."
+                "six export column and grain contracts, seven KPIs and 58 loss records."
             )
             return
 
