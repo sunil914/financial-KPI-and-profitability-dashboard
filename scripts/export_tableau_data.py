@@ -93,6 +93,13 @@ EXPECTED_UNIQUE_GRAINS = {
     "v_segment_discount_performance": ("segment", "discount_band"),
 }
 
+EXPECTED_RECONCILIATIONS = {
+    "v_monthly_performance": ("net_sales", "profit"),
+    "v_product_performance": ("units_sold", "net_sales", "profit"),
+    "v_country_performance": ("net_sales", "profit"),
+    "v_segment_discount_performance": ("records", "net_sales", "profit"),
+}
+
 
 def validate_export_grains(connection: sqlite3.Connection) -> None:
     """Reject empty, null or duplicate rows at each Tableau export grain."""
@@ -190,6 +197,36 @@ def validate_database(connection: sqlite3.Connection) -> None:
                 f"{key} mismatch: expected {EXPECTED_KPIS[key]}, got {actual[key]}"
             )
 
+    for view, measures in EXPECTED_RECONCILIATIONS.items():
+        select_list = ", ".join(
+            f'SUM("{measure}") AS "{measure}"' for measure in measures
+        )
+        totals = dict(
+            connection.execute(
+                f'SELECT {select_list} FROM "{view}"'
+            ).fetchone()
+        )
+        failures = []
+        for measure in measures:
+            expected = EXPECTED_KPIS[measure]
+            actual_total = totals[measure]
+            if measure == "records":
+                if actual_total != expected:
+                    failures.append(
+                        f"{measure}: expected {expected}, got {actual_total}"
+                    )
+            elif not math.isclose(
+                actual_total, expected, rel_tol=0, abs_tol=0.005
+            ):
+                failures.append(
+                    f"{measure}: expected {expected}, got {actual_total}"
+                )
+        if failures:
+            raise ValueError(
+                f"{view} aggregate reconciliation failed:\n- "
+                + "\n- ".join(failures)
+            )
+
     loss_rows = connection.execute(
         "SELECT COUNT(*) FROM v_loss_exceptions"
     ).fetchone()[0]
@@ -252,7 +289,8 @@ def main() -> None:
         if args.check_only:
             print(
                 "Validation passed: SQLite integrity, six required views, "
-                "six export column and grain contracts, seven KPIs and 58 loss records."
+                "six export column and grain contracts, four aggregate "
+                "reconciliations, seven KPIs and 58 loss records."
             )
             return
 
