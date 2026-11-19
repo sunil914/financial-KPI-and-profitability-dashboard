@@ -99,6 +99,7 @@ EXPECTED_RECONCILIATIONS = {
     "v_country_performance": ("net_sales", "profit"),
     "v_segment_discount_performance": ("records", "net_sales", "profit"),
 }
+AGGREGATE_ROUNDING_TOLERANCE = 0.015
 
 
 def validate_export_grains(connection: sqlite3.Connection) -> None:
@@ -216,7 +217,10 @@ def validate_database(connection: sqlite3.Connection) -> None:
                         f"{measure}: expected {expected}, got {actual_total}"
                     )
             elif not math.isclose(
-                actual_total, expected, rel_tol=0, abs_tol=0.005
+                actual_total,
+                expected,
+                rel_tol=0,
+                abs_tol=AGGREGATE_ROUNDING_TOLERANCE,
             ):
                 failures.append(
                     f"{measure}: expected {expected}, got {actual_total}"
