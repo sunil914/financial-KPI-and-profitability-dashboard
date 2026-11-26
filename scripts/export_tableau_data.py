@@ -101,6 +101,34 @@ EXPECTED_RECONCILIATIONS = {
 }
 AGGREGATE_ROUNDING_TOLERANCE = 0.015
 
+EXPECTED_DIMENSION_DOMAINS = {
+    "v_monthly_performance": {
+        "year": {2013, 2014},
+        "month_number": set(range(1, 13)),
+        "month_name": {
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November",
+            "December",
+        },
+    },
+    "v_product_performance": {
+        "product": {"Amarilla", "Carretera", "Montana", "Paseo", "Velo", "VTT"},
+    },
+    "v_country_performance": {
+        "country": {
+            "Canada", "France", "Germany", "Mexico",
+            "United States of America",
+        },
+    },
+    "v_segment_discount_performance": {
+        "segment": {
+            "Channel Partners", "Enterprise", "Government", "Midmarket",
+            "Small Business",
+        },
+        "discount_band": {"High", "Low", "Medium", "None"},
+    },
+}
+
 
 def validate_export_grains(connection: sqlite3.Connection) -> None:
     """Reject empty, null or duplicate rows at each Tableau export grain."""
@@ -147,6 +175,25 @@ def validate_export_grains(connection: sqlite3.Connection) -> None:
         )
 
 
+def validate_dimension_domains(connection: sqlite3.Connection) -> None:
+    """Reject unexpected or missing categorical values before Tableau export."""
+    for view, field_domains in EXPECTED_DIMENSION_DOMAINS.items():
+        for field, expected_values in field_domains.items():
+            actual_values = {
+                row[0]
+                for row in connection.execute(
+                    f'SELECT DISTINCT "{field}" FROM "{view}"'
+                )
+            }
+            if actual_values != expected_values:
+                expected = sorted(expected_values, key=str)
+                actual = sorted(actual_values, key=str)
+                raise ValueError(
+                    f"{view}.{field} domain mismatch: "
+                    f"expected {expected}, got {actual}."
+                )
+
+
 def validate_database(connection: sqlite3.Connection) -> None:
     """Fail before export if integrity, views or documented KPIs drift."""
     integrity = connection.execute("PRAGMA quick_check").fetchone()[0]
@@ -173,6 +220,7 @@ def validate_database(connection: sqlite3.Connection) -> None:
             )
 
     validate_export_grains(connection)
+    validate_dimension_domains(connection)
 
     row = connection.execute("SELECT * FROM v_project_kpis").fetchone()
     if row is None:
@@ -293,8 +341,8 @@ def main() -> None:
         if args.check_only:
             print(
                 "Validation passed: SQLite integrity, six required views, "
-                "six export column and grain contracts, four aggregate "
-                "reconciliations, seven KPIs and 58 loss records."
+                "six export column and grain contracts, seven dimension-domain "
+                "contracts, four aggregate reconciliations, seven KPIs and 58 loss records."
             )
             return
 
